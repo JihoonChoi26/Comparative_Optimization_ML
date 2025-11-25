@@ -1,6 +1,6 @@
 ## Logistic regression with L2 penalty Model Setup
 import numpy as np
-from optimizers_logreg import fit_gd_fixed, fit_gd_armijo, armijo_backtracking
+from optimizers_logreg import fit_gd_fixed, fit_gd_armijo, armijo_backtracking, fit_nlcg_prp, fit_bfgs
 
 # sigmoid link function
 def sigmoid(z):
@@ -29,6 +29,9 @@ def logreg_loss_and_grad(w, X, y, lamda):
     # predicted probabilities (p_i = sigmoid(z_i))
     p = sigmoid(z)
 
+    # avoid log(0) numerical issues by clipping p slightly
+    p = np.clip(p, 1e-15, 1 - 1e-15)
+    
     # average negative log-likelihood
     # = mean(-y*log(p) - (1-y)*log(1-p))
     data_loss = -np.mean(y * np.log(p) + (1 - y) * np.log(1 - p))
@@ -73,10 +76,11 @@ def fit_logreg(X, y, lam=1.0, optimizer="gd_armijo",
     Xb = add_intercept(np.asarray(X, dtype=float))
     yb = np.asarray(y, dtype=float).reshape(-1)
 
+    # lambda wrapper for
     # objective and gradient wrapper f(w), g(w)
     fg = lambda w: logreg_loss_and_grad(w, Xb, yb, lam)
 
-    # start at zeros
+    # initialize weights; start at zeros
     w0 = np.zeros(Xb.shape[1], dtype=float)
 
     # choose optimizer
@@ -84,14 +88,14 @@ def fit_logreg(X, y, lam=1.0, optimizer="gd_armijo",
         w, info = fit_gd_fixed(fg, w0, step=step, tol=tol, max_iter=max_iter)
     elif optimizer == "gd_armijo":
         w, info = fit_gd_armijo(fg, w0, alpha0=alpha0, tol=tol, max_iter=max_iter)
-    else:
-        raise ValueError("optimizer must be one of {'gd','gd_armijo','cg','bfgs'}")
-    """ in development
     elif optimizer == "cg":
-        w, info = fit_nlcg_prp(fg, w0, tol=tol, max_iter=max_iter)
+        # Nonlinear Conjugate Gradient
+        w, info = fit_nlcg_prp(fg, w0, alpha0=alpha0, tol=tol, max_iter=max_iter)
     elif optimizer == "bfgs":
-        w, info = fit_bfgs(fg, w0, tol=tol, max_iter=max_iter)
-    """
+        # Quasi-Newton BFGS
+        w, info = fit_bfgs(fg, w0, alpha0=alpha0, tol=tol, max_iter=max_iter)
+    else:
+        raise ValueError(f"Unknown optimizer: {optimizer}")
     return w, info
 
 # ---------- tiny helper to build arrays from your DataFrames ----------
