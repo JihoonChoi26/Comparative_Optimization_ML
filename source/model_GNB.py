@@ -6,11 +6,11 @@ class SimpleGaussianNB:
     Simplified Gaussian Naive Bayes Classifier
         
     Core Ideas:
-    - Bayes' Theorem: P(y|x) ∝ P(y) * P(x|y)
+    - Bayes' Theorem: P(y|x) proportional to P(y) * P(x|y)
     - Naive Assumption: Features are independent of each other
     - Gaussian Assumption: Each feature follows a normal distribution
         
-    Therefore: P(x|y) = ∏ P(x_i|y) where P(x_i|y) ~ N(μ_yi, σ²_yi)
+    Therefore: P(x|y) = product of P(x_i|y) where P(x_i|y) follows N(mean_yi, var_yi)
     '''
     def __init__(self):
         '''
@@ -18,8 +18,8 @@ class SimpleGaussianNB:
         '''
         self.classes = None # Class labels (e.g., [0, 1])
         self.class_priors = None # P(y): Prior probability of each class
-        self.means = None # μ: Mean for each (class, feature) pair
-        self.variances = None # σ²: Variance for each (class, feature) pair
+        self.means = None # Mean for each (class, feature) pair
+        self.variances = None # Variance for each (class, feature) pair
         
     def fit(self, X, y):
         '''
@@ -39,7 +39,7 @@ class SimpleGaussianNB:
         Training Process:
         1. Separate data by each class
         2. Calculate prior for each class: P(y=c) = (# of samples in class c) / (total # of samples)
-        3. Calculate mean (μ) and variance (σ²) for each (class, feature) pair
+        3. Calculate mean and variance for each (class, feature) pair
         '''
         # Convert DataFrame to numpy array (for consistency in internal calculations)
         if isinstance(X, pd.DataFrame):
@@ -66,16 +66,16 @@ class SimpleGaussianNB:
             # X_c: shape (n_samples_in_class_c, n_features)
             X_c = X[y == c]
             
-            # 1. Calculate prior probability: P(y=c)
+            # 1) Calculate prior probability: P(y=c)
             # Proportion of class c among all samples
             self.class_priors[i] = len(X_c) / len(X)
             
-            # 2. Calculate mean for each feature: μ_c
+            # 2) Calculate mean for each feature: mean_c
             # X_c.mean(axis=0): Calculate mean for each column (feature)
             # Result: shape (n_features,) - one mean value per feature
             self.means[i] = X_c.mean(axis=0)
             
-            # 3. Calculate variance for each feature: σ²_c
+            # 3) Calculate variance for each feature: var_c
             # X_c.var(axis=0): Calculate variance for each column (feature)
             # Result: shape (n_features,) - one variance value per feature
             self.variances[i] = X_c.var(axis=0) + 1e-9 # + 1e-9: Prevent variance from becoming 0 (avoid division by zero later)
@@ -104,12 +104,12 @@ class SimpleGaussianNB:
         log_likelihood : float
             log P(x|y) = sum over all log P(x_i|y)
         '''
-        # Term 1: -0.5 * Σ log(2πσ²)
+        # Term 1: -0.5 * sum(log(2 * pi * var))
         # Calculate for each feature and sum all
         term1 = -0.5 * np.sum(np.log(2 * np.pi * var))
         
-        # Term 2: -0.5 * Σ (x_i - μ)² / σ²
-        # For each feature, divide (observed - mean)² by variance, then sum all
+        # Term 2: -0.5 * sum((x_i - mean)^2 / var)
+        # For each feature, divide (observed - mean)^2 by variance, then sum all
         term2 = -0.5 * np.sum((x - mean)**2 / var)
         
         return term1 + term2
@@ -157,7 +157,7 @@ class SimpleGaussianNB:
                     x, self.means[i], self.variances[i]
                 )
                 
-                # 3) Posterior probability: log P(y=c|x) ∝ log P(y=c) + log P(x|y=c)
+                # 3) Posterior probability: log P(y=c|x) proportional to log P(y=c) + log P(x|y=c)
                 # Log version of Bayes' Theorem
                 # (Denominator P(x) is common to all classes, so can be omitted for comparison)
                 posteriors.append(prior + likelihood) # e.g., list [np.float64(-77.65), np.float64(-53.45)]
@@ -188,7 +188,7 @@ class SimpleGaussianNB:
         ---------------------------------
         1. Calculate log posterior probability for each class (same as predict)
         2. Convert to actual probabilities using Softmax transformation
-           P(y=c|x) = exp(log P(y=c|x)) / Σ exp(log P(y=k|x))
+           P(y=c|x) = exp(log P(y=c|x)) / sum(exp(log P(y=k|x)))
         3. Use log-sum-exp trick for numerical stability
         '''
         if isinstance(X, pd.DataFrame):
@@ -212,16 +212,16 @@ class SimpleGaussianNB:
             # shape: (n_classes,) - log P(y|x) for each class
             posteriors = np.array(posteriors) # list -> ndarray object
 
-            # Convert to actual probabilities using softmax transformation (P(y=c|x) = exp(log P(y=c|x)) / Σ exp(log P(y=k|x)))
+            # Convert to actual probabilities using softmax transformation (P(y=c|x) = exp(log P(y=c|x)) / sum(exp(log P(y=k|x))))
             # But exp() can create very large/small values causing overflow/underflow)
             # --> So using softmax transformation with log-sum-exp trick
             # 1) Subtract maximum value for stabilization: posteriors - max(posteriors)
             #    --> makes the largest value 0, and the rest negative
-            #    --> mathematically equivalent: exp(a-M) / Σexp(b-M) = exp(a) / Σexp(b)
+            #    --> mathematically equivalent: exp(a-M) / sum(exp(b-M)) = exp(a) / sum(exp(b))
             posteriors = posteriors - np.max(posteriors)
             
             # 2) Apply exponential function
-            # Now all values are ≤ 0, so no overflow
+            # Now all values are <= 0, so no overflow
             exp_posteriors = np.exp(posteriors)
             
             # 3) Normalize
