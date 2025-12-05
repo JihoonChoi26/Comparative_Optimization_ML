@@ -1,7 +1,7 @@
 ### Model Setup for Hard-Margin SVM
 import numpy as np
 
-from optimizers_logreg import fit_gd_fixed, fit_gd_armijo, armijo_backtracking
+from optimizers_logreg import fit_gd_fixed, fit_gd_armijo, armijo_backtracking, fit_bfgs, fit_sgd
 from models_logreg import add_intercept
 
 def svm_loss_and_grad(theta, X, y, C = 1000, loss = "squared_hinge"):
@@ -107,7 +107,7 @@ def fit_subgradient(fg, theta0, alpha0=1, tol=1e-6, max_iter=10000):
 
 def fit_svm_primal(X, y, C = 1000, loss = "squared_hinge",
                    optimizer = "gd_armijo", step = 1e-2, alpha0 = 1,
-                   tol = 1e-6, max_iter = 10000):
+                   tol = 1e-6, max_iter = 10000, epochs = 50):
     """
     Train a primal SVM with a chosen first-order optimizer (fixed GD or Armijo GD)
 
@@ -115,7 +115,8 @@ def fit_svm_primal(X, y, C = 1000, loss = "squared_hinge",
     y: labels in {0,1} or {-1,+1}  will be coerced to {-1,+1}
     C: regularization weight on the loss term
     loss: squared_hinge (smooth) or hinge (non-smooth)
-    optimizer: "gd" with fixed step, "gd_armijo" with backtracking, "subgrad" for hinge
+    optimizer: "gd" with fixed step, "gd_armijo" with backtracking, 
+               "bfgs" and "sgd" for (squared-)hinge loss function
     step: fixed step size for "gd"
     alpha0: initial step guess for Armijo and base step for subgrad
     tol: stop when ||grad|| <= tol
@@ -136,23 +137,40 @@ def fit_svm_primal(X, y, C = 1000, loss = "squared_hinge",
     # fg(theta) will return (loss_value, gradient_vector)
     fg = lambda theta: svm_loss_and_grad(theta, Xb, y, C = C, loss = loss)
 
+    # for SGD
+    # for passing a specific batch (X_batch, y_batch)
+    fg_stoch = lambda theta, X_s, y_s: svm_loss_and_grad(theta, X_s, y_s, C = C, loss = loss)
+
     # initialize parameters to zeros and last entry is bias b
     theta0 = np.zeros(Xb.shape[1], dtype=float)
 
     # choose and run the selected optimizer
     if optimizer == "gd":
-        # smooth objective with fixed GD
+        # smooth primal objective with fixed GD
         theta, info = fit_gd_fixed(fg, theta0, step=step, tol=tol, max_iter=max_iter)
+
     elif optimizer == "gd_armijo":
-        # smooth objective with Armijo backtracking
+        # smooth primal objective with Armijo backtracking
         if loss != "squared_hinge":
             raise ValueError("Armijo requires 'squared_hinge' (smooth).")
         theta, info = fit_gd_armijo(fg, theta0, alpha0=alpha0, tol=tol, max_iter=max_iter)
+
+    elif optimizer == "bfgs":
+        # smooth primal objective with BFGS
+        if loss != "squared_hinge":
+            raise ValueError("BFGS requires smooth loss ('squared_hinge').")
+        theta, info = fit_bfgs(fg, theta0, alpha0 = 1, tol = tol, max_iter = max_iter)
+
     elif optimizer == "subgrad":
         # for non-smooth hinge
         theta, info = fit_subgradient(fg, theta0, alpha0=alpha0, tol=tol, max_iter=max_iter)
+
+    elif optimizer == "sgd":
+        theta, info = fit_sgd(fg_stoch, theta0, Xb, y, alpha0 = step, epochs = epochs, batch_size = 1)
+        
     else:
         raise ValueError("optimizer must be {'gd','gd_armijo','subgrad'}")
+    
     return theta, info
 
 # Computes the raw decision function (f(x) = w^T x + b -> -1 or +1)
