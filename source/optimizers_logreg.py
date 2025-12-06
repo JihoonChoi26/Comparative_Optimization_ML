@@ -295,4 +295,56 @@ def fit_bfgs(fg, w0, tol=1e-6, max_iter=10000, alpha0=1.0):
         f = f_new
         g = g_new
         
-    return w, {'status': 1, 'iters': max_iter, 'history': hist}
+    return w, {"status": 1, "iters": max_iter, "history": hist}
+
+
+# Stochastic Gradient Descent (SGD)
+def fit_sgd(fg_stoch, w0, X, y, alpha0 = 0.01, epochs = 50, batch_size = 1):
+    """
+    Stochastic Gradient Descent
+
+    Params
+    fg_stoch: function
+        wrapper function that takes (theta, X_batch, y_batch) and returns (loss, grad)
+    w0: array
+        initial weights
+    X, y: array
+        Training data of predictors and outcome
+    alpha0: float
+        Base learning rate
+    epochs: int
+        number of passes through the entire dataset
+    """
+    w = w0.copy()
+    n_samples = X.shape[0]
+    hist = []
+
+    # goabal step counter for decay
+    t = 0
+
+    for epoch in range(epochs):
+        # shuffle data at the start of each epoch
+        indices = np.random.permutation(n_samples)
+        X_shuffled = X[indices]
+        y_shuffled = y[indices]
+
+        # mini-batch loop
+        for i in range(0, n_samples, batch_size):
+            X_batch = X_shuffled[i: i + batch_size]
+            y_batch = y_shuffled[i: i + batch_size]
+
+            # compute gradient for this batch
+            _, g = fg_stoch(w, X_batch, y_batch)
+
+            # time-based decay schedule
+            # alpha_t = alpha0 / sqrt(t + 1)
+            alpha = alpha0 / (1 + 0.01 * t)
+
+            w = w - alpha * g
+            t += 1
+
+        # log progress at the end
+        loss_full, g_full = fg_stoch(w, X, y)
+        hist.append((epoch, loss_full, np.linalg.norm(g_full)))
+
+    return w, {"status": 1, "iters": epochs, "history": hist}
